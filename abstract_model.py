@@ -202,7 +202,8 @@ class DANsModel(BaseEstimator):
             'best_value': self._callback_container.callbacks[1].best_loss,
             "best_epoch": self._callback_container.callbacks[1].best_epoch
         }
-        torch.save(save_dict, self.log.log_dir + '/checkpoint.pth')
+        if self.log is not None:
+            torch.save(save_dict, self.log.log_dir + '/checkpoint.pth')
 
 
     def load_model(self, filepath, input_dim, output_dim, n_gpu=1):

@@ -208,6 +208,41 @@ def cardio():
     X_train, X_valid, X_test = quantile_transform(train, valid, test)
     return X_train, y_train, X_valid, y_valid, X_test, y_test
 
+def displacement_amplifier():
+    full_output_variables = ['X', 'σx', 'Y', 'σy', 's-2r']
+    target = 'σy'
+    data = pd.read_excel('./data/displacement_amplifier/仿真结果.xlsx')
+    data = data.astype(float, errors='raise')
+    for i in range(data.shape[0]-1, -1, -1):
+        if data.loc[i, target] <= 0:
+            data.drop(index=data.index[i], axis=0, inplace=True)
+    try:
+        data.drop([variableName for variableName in full_output_variables if variableName != target], axis=1, inplace=True)
+    except:
+        print('Warning, something cannot be droped!')
+
+    try:
+        data = data.drop('序号', axis=1)
+    except:
+        print('Warning, something cannot be droped!')
+
+    train_idx = pd.read_csv('./data/displacement_amplifier/train_idx.csv')['0'].values
+    train = data.iloc[train_idx, :]
+    valid_idx = pd.read_csv('./data/displacement_amplifier/valid_idx.csv')['0'].values
+    valid = data.iloc[valid_idx, :]
+    test_idx = pd.read_csv('./data/displacement_amplifier/test_idx.csv')['0'].values
+    test = data.iloc[test_idx, :]
+
+    y_train = train[target].values
+    train.drop([target], axis=1, inplace=True)
+    y_valid = valid[target].values
+    valid.drop([target], axis=1, inplace=True)
+    y_test = test[target].values
+    test.drop([target], axis=1, inplace=True)
+
+    X_train, X_valid, X_test = quantile_transform(train, valid, test)
+    return X_train, y_train, X_valid, y_valid, X_test, y_test
+
 
 def get_data(datasetname):
     if datasetname == 'forest':
@@ -224,6 +259,8 @@ def get_data(datasetname):
         return epsilon()
     elif datasetname == 'click':
         return click()
+    elif datasetname == 'displacement_amplifier':
+        return displacement_amplifier()
 
 if __name__ == '__main__':
     forest_cover()

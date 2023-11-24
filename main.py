@@ -8,11 +8,14 @@ from data.dataset import get_data
 from lib.utils import normalize_reg_label
 from qhoptim.pyt import QHAdam
 from config.default import cfg
+from math import sqrt
+import numpy as np
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 
 def get_args():
     parser = argparse.ArgumentParser(description='PyTorch v1.4, DANet Task Training')
-    parser.add_argument('-c', '--config', type=str, required=False, default='config/forest_cover_type.yaml', metavar="FILE", help='Path to config file')
+    # parser.add_argument('-c', '--config', type=str, required=False, default='config/forest_cover_type.yaml', metavar="FILE", help='Path to config file')
+    parser.add_argument('-c', '--config', type=str, required=False, default='config/displacement_amplifier.yaml', metavar="FILE", help='Path to config file')
     parser.add_argument('-g', '--gpu_id', type=str, default='1', help='GPU ID')
 
     args = parser.parse_args()
@@ -60,6 +63,17 @@ def set_task_model(task, std=None, seed=1):
         eval_metric = ['mse']
     return clf, eval_metric
 
+def RRMSE(original_data, prediction):
+    rrmse = sqrt(mean_squared_error(prediction, original_data)) / np.mean(prediction) * 100
+    return rrmse
+
+def performanceCalculation(original_data, predictions, flag='Train'):
+    print('------------' + flag + '------------')
+    rrmse = RRMSE(original_data, predictions)
+    print("rrmse: ", rrmse, "%")
+    return rrmse
+
+
 if __name__ == '__main__':
 
     print('===> Setting configuration ...')
@@ -98,3 +112,9 @@ if __name__ == '__main__':
     elif task == 'regression':
         test_mse = mean_squared_error(y_pred=preds_test, y_true=y_test)
         print(f"FINAL TEST MSE FOR {train_config['dataset']} : {test_mse}")
+        preds_train = clf.predict(X_train)
+        preds_valid = clf.predict(X_valid)
+        preds_train_valid = np.concatenate([preds_train, preds_valid])
+        y_train_valid = np.concatenate([y_train, y_valid])
+        performanceCalculation(y_train_valid, preds_train_valid, flag='Train')
+        performanceCalculation(y_test, preds_test, flag='Test')

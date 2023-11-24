@@ -18,3 +18,5 @@ cfg.fit.max_epochs = 4000
 cfg.fit.patience = 1500
 cfg.fit.batch_size = 8192
 cfg.fit.virtual_batch_size = 256
+cfg.fit.weight_decay = 0.0
+cfg.fit.schedule_step = 20

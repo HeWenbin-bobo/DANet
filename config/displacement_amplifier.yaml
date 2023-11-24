@@ -1,0 +1,17 @@
+dataset: 'displacement_amplifier'
+task: 'regression'
+resume_dir: ''
+logname: ''
+
+fit:
+  max_epochs: 150
+  patience: 80
+  lr: 0.008
+  weight_decay: 1e-5
+  schedule_step: 20
+
+model:
+  layer: 20
+  base_outdim: 64
+  k: 5
+  drop_rate: 0.1
