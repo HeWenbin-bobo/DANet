@@ -71,7 +71,12 @@ class DANsModel(BaseEstimator):
         callbacks=None,
         logname=None,
         resume_dir=None,
-        n_gpu=1
+        n_gpu=1,
+        y_train_classification=None,
+        eval_set_classification=None,
+        eval_name_classification=None,
+        eval_metric_classification=None,
+        loss_fn_classification=None,
     ):
         """Train a neural network stored in self.network
         Using train_dataloader for training data and
@@ -120,12 +125,14 @@ class DANsModel(BaseEstimator):
         eval_set = eval_set if eval_set else []
 
         self.loss_fn = self._default_loss if loss_fn is None else loss_fn
+        self.loss_fn_classification = self._default_loss_classification if loss_fn_classification is None else loss_fn_classification
         check_array(X_train)
 
-        self.update_fit_params(X_train, y_train, eval_set)
+        self.update_fit_params(X_train, y_train, y_train_classification, eval_set)
         # Validate and reformat eval set depending on training data
         eval_names, eval_set = validate_eval_set(eval_set, eval_name, X_train, y_train)
         train_dataloader, valid_dataloaders = self._construct_loaders(X_train, y_train, eval_set)
+        train_dataloader_classification, valid_dataloaders_classification = self._construct_loaders(X_train, y_train_classification, eval_set_classification)
 
         self._set_network()
         self._set_metrics(eval_metric, eval_names)
@@ -147,11 +154,11 @@ class DANsModel(BaseEstimator):
             self.epoch = epoch_idx
             # Call method on_epoch_begin for all callbacks
             self._callback_container.on_epoch_begin(epoch_idx)
-            self._train_epoch(train_dataloader)
+            self._train_epoch(train_dataloader, train_dataloader_classification)
 
             # Apply predict epoch to all eval sets
-            for eval_name, valid_dataloader in zip(eval_names, valid_dataloaders):
-                self._predict_epoch(eval_name, valid_dataloader)
+            for eval_name, valid_dataloader, valid_dataloader_classification in zip(eval_names, valid_dataloaders, valid_dataloaders_classification):
+                self._predict_epoch(eval_name, valid_dataloader, valid_dataloader_classification)
 
             # Call method on_epoch_end for all callbacks
             self._callback_container.on_epoch_end(epoch_idx, logs=self.history.epoch_metrics)
@@ -187,7 +194,7 @@ class DANsModel(BaseEstimator):
         for batch_nb, data in enumerate(dataloader):
             data = data.to(self.device).float()
             with torch.no_grad():
-                output = self.network(data)
+                output, _ = self.network(data)
                 predictions = output.cpu().detach().numpy()
             results.append(predictions)
         res = np.vstack(results)
@@ -226,7 +233,7 @@ class DANsModel(BaseEstimator):
         self.network = accelerated_module(self.network)
         return
 
-    def _train_epoch(self, train_loader):
+    def _train_epoch(self, train_loader, train_dataloader_classificcation):
         """
         Trains one epoch of the network in self.network
         Parameters
@@ -236,9 +243,9 @@ class DANsModel(BaseEstimator):
         """
         self.network.train()
         loss = []
-        for batch_idx, (X, y) in enumerate(train_loader):
+        for batch_idx, ((X, y), (_, y_classification)) in enumerate(zip(train_loader, train_dataloader_classificcation)):
             self._callback_container.on_batch_begin(batch_idx)
-            batch_logs = self._train_batch(X, y)
+            batch_logs = self._train_batch(X, y, y_classification)
 
             self._callback_container.on_batch_end(batch_idx, batch_logs)
             loss.append(batch_logs['loss'])
@@ -248,7 +255,7 @@ class DANsModel(BaseEstimator):
         self.history.epoch_metrics.update(epoch_logs)
         return
 
-    def _train_batch(self, X, y):
+    def _train_batch(self, X, y, y_classification):
         """
         Trains one batch of data
         Parameters
@@ -268,10 +275,11 @@ class DANsModel(BaseEstimator):
 
         X = X.to(self.device).float()
         y = y.to(self.device).float()
+        y_classification = y_classification.to(self.device).float()
 
         self._optimizer.zero_grad()
-        output = self.network(X)
-        loss = self.compute_loss(output, y)
+        output, output_classification = self.network(X)
+        loss = self.compute_loss(output, y, output_classification, y_classification)
         # Perform backward pass and optimization
 
         loss.backward()
@@ -283,7 +291,7 @@ class DANsModel(BaseEstimator):
 
         return batch_logs
 
-    def _predict_epoch(self, name, loader):
+    def _predict_epoch(self, name, loader, loader_classification):
         """
         Predict an epoch and update metrics.
         Parameters
@@ -297,14 +305,20 @@ class DANsModel(BaseEstimator):
         self.network.eval()
         list_y_true = []
         list_y_score = []
+        list_y_true_classification = []
+        list_y_score_classification = []
 
         # Main loop
         for batch_idx, (X, y) in enumerate(loader):
-            scores = self._predict_batch(X)
+            # y_classification = loader_classification[batch_idx][-1]
+            scores, scores_classification = self._predict_batch(X)
             list_y_true.append(y)
             list_y_score.append(scores)
+            # list_y_true_classification.append(y_classification)
+            # list_y_score_classification.append(scores_classification)
 
         y_true, scores = self.stack_batches(list_y_true, list_y_score)
+        # y_true_classification, scores_classification = self.stack_batches(list_y_true_classification, list_y_score_classification)
 
         metrics_logs = self._metric_container_dict[name](y_true, scores)
         if self._task == 'regression':
@@ -330,16 +344,18 @@ class DANsModel(BaseEstimator):
 
         # compute model output
         with torch.no_grad():
-            scores = self.network(X)
+            scores, scores_classification = self.network(X)
             if isinstance(scores, list):
                 scores = [x.cpu().detach().numpy() for x in scores]
+                scores_classification = [x.cpu().detach().numpy() for x in scores_classification]
             else:
                 scores = scores.cpu().detach().numpy()
+                scores_classification = scores_classification.cpu().detach().numpy()
 
-        return scores
+        return scores, scores_classification
 
     @abstractmethod
-    def update_fit_params(self, X_train, y_train, eval_set):
+    def update_fit_params(self, X_train, y_train, y_train_classification, eval_set):
         """
         Set attributes relative to fit function.
         Parameters
@@ -365,7 +381,7 @@ class DANsModel(BaseEstimator):
                   'drop_rate': self.drop_rate,
                   }
 
-        self.network = DANet(self.input_dim, self.output_dim, **params)
+        self.network = DANet(self.input_dim, self.output_dim, self.output_dim_classification, **params)
         if self.n_gpu > 1 and self.device == 'cuda':
             self.network = DataParallel(self.network)
         self.network = self.network.to(self.device)
@@ -477,7 +493,7 @@ class DANsModel(BaseEstimator):
         self.network.virtual_batch_size = self.virtual_batch_size
 
     @abstractmethod
-    def compute_loss(self, y_score, y_true):
+    def compute_loss(self, y_score, y_true, y_score_classification, y_true_classification):
         """
         Compute the loss.
         Parameters

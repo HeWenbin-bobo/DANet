@@ -80,7 +80,7 @@ if __name__ == '__main__':
     train_config, fit_config, model_config, task, seed, n_gpu = get_args()
     logname = None if train_config['logname'] == '' else train_config['dataset'] + '/' + train_config['logname']
     print('===> Getting data ...')
-    X_train, y_train, X_valid, y_valid, X_test, y_test = get_data(train_config['dataset'])
+    X_train, y_train, X_valid, y_valid, X_test, y_test, y_train_classification, y_valid_classification, y_test_classification = get_data(train_config['dataset'])
     mu, std = None, None
     if task == 'regression':
         mu, std = y_train.mean(), y_train.std()
@@ -100,7 +100,9 @@ if __name__ == '__main__':
         batch_size=fit_config['batch_size'], virtual_batch_size=fit_config['virtual_batch_size'],
         logname=logname,
         resume_dir=train_config['resume_dir'],
-        n_gpu=n_gpu
+        n_gpu=n_gpu,
+        y_train_classification=y_train_classification,
+        eval_set_classification=[(X_valid, y_valid_classification)],
     )
 
     preds_test = clf.predict(X_test)
@@ -115,6 +117,12 @@ if __name__ == '__main__':
         preds_train = clf.predict(X_train)
         preds_valid = clf.predict(X_valid)
         preds_train_valid = np.concatenate([preds_train, preds_valid])
+        preds_train_valid = preds_train_valid * std + mu
         y_train_valid = np.concatenate([y_train, y_valid])
+        y_train_valid = y_train_valid * std + mu
         performanceCalculation(y_train_valid, preds_train_valid, flag='Train')
+
+        y_test = y_test * std + mu
+        preds_test = preds_test * std + mu
         performanceCalculation(y_test, preds_test, flag='Test')
+#'accuracy' metric means roc_auc_score

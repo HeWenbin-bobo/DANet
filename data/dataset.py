@@ -240,8 +240,20 @@ def displacement_amplifier():
     y_test = test[target].values
     test.drop([target], axis=1, inplace=True)
 
+    # Labels for classification task
+    y_train_classification = y_train.copy()
+    y_train_classification[y_train_classification<=np.mean(y_train)] = 0
+    y_train_classification[y_train_classification>np.mean(y_train)] = 1
+    y_valid_classification = y_valid.copy()
+    y_valid_classification[y_valid_classification<=np.mean(y_train)] = 0
+    y_valid_classification[y_valid_classification>np.mean(y_train)] = 1
+    y_test_classification = y_test.copy()
+    y_test_classification[y_test_classification<=np.mean(y_train)] = 0
+    y_test_classification[y_test_classification>np.mean(y_train)] = 1
+
     X_train, X_valid, X_test = quantile_transform(train, valid, test)
-    return X_train, y_train, X_valid, y_valid, X_test, y_test
+    return X_train, y_train, X_valid, y_valid, X_test, y_test, \
+        y_train_classification, y_valid_classification, y_test_classification
 
 
 def get_data(datasetname):

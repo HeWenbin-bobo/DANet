@@ -82,7 +82,7 @@ class BasicBlock(nn.Module):
 
 
 class DANet(nn.Module):
-    def __init__(self, input_dim, num_classes, layer_num, base_outdim, k, virtual_batch_size, drop_rate=0.1):
+    def __init__(self, input_dim, num_classes, num_classes_classification, layer_num, base_outdim, k, virtual_batch_size, drop_rate=0.1):
         super(DANet, self).__init__()
         params = {'base_outdim': base_outdim, 'k': k, 'virtual_batch_size': virtual_batch_size,
                   'fix_input_dim': input_dim, 'drop_rate': drop_rate}
@@ -99,10 +99,28 @@ class DANet(nn.Module):
                                 nn.ReLU(inplace=True),
                                 nn.Linear(512, num_classes))
 
+        self.classification_drop = nn.Dropout(0.1)
+        self.classification_fc = nn.Sequential(nn.Linear(base_outdim, 256),
+                                               nn.ReLU(inplace=True),
+                                               nn.Linear(256, 512),
+                                               nn.ReLU(inplace=True),
+                                               nn.Linear(512, num_classes_classification))
+
     def forward(self, x):
+        # out = self.init_layer(x)
+        # for i in range(len(self.layer)):
+        #     out = self.layer[i](x, out)
+        # out = self.drop(out)
+        # out = self.fc(out)
+        # return out
+
         out = self.init_layer(x)
-        for i in range(len(self.layer)):
+        for i in range(len(self.layer)//2):
+            out = self.layer[i](x, out)
+        classification_out = self.classification_drop(out)
+        classification_out = self.classification_fc(classification_out)
+        for i in range(len(self.layer)-len(self.layer)//2):
             out = self.layer[i](x, out)
         out = self.drop(out)
         out = self.fc(out)
-        return out
+        return out, classification_out
