@@ -105,16 +105,16 @@ class DANetRegressor(DANsModel):
         self._task = 'regression'
         self._default_loss = mse_loss
         self._default_metric = 'mse'
-        self._default_loss_classification = cross_entropy
-        self._default_metric_classification = 'accuracy'
+        self._default_loss_classification = cross_entropy  # loss function for classification task
+        self._default_metric_classification = 'accuracy'  # metric for classification task
 
     def prepare_target(self, y):
         return y
 
     def compute_loss(self, y_pred, y_true, y_score_classification, y_true_classification):
-        a = self.loss_fn(y_pred, y_true)
-        b = self.loss_fn_classification(y_score_classification, y_true_classification.long())
-        return a+b
+        regression_loss = self.loss_fn(y_pred, y_true)
+        classification_loss = self.loss_fn_classification(y_score_classification, y_true_classification.long())
+        return regression_loss + classification_loss  # For now, total loss equals to the loss of regression task and classification task
 
     def update_fit_params(
         self,
@@ -129,7 +129,7 @@ class DANetRegressor(DANsModel):
                   "Use reshape(-1, 1) for single regression."
             raise ValueError(msg)
         self.output_dim = y_train.shape[1]
-        self.output_dim_classification = len(np.unique(y_train_classification))
+        self.output_dim_classification = len(np.unique(y_train_classification))  # Get number of classes for classification task automatically
         self.preds_mapper = None
 
 

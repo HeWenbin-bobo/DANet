@@ -99,6 +99,7 @@ class DANet(nn.Module):
                                 nn.ReLU(inplace=True),
                                 nn.Linear(512, num_classes))
 
+        # Structure for classification problem
         self.classification_drop = nn.Dropout(0.1)
         self.classification_fc = nn.Sequential(nn.Linear(base_outdim, 256),
                                                nn.ReLU(inplace=True),
@@ -114,6 +115,9 @@ class DANet(nn.Module):
         # out = self.fc(out)
         # return out
 
+        # Return two type of outputs
+        # One is the output for regression task, another is for classification task
+        # In this demo, the output for classification task is extracted from the half layers
         out = self.init_layer(x)
         for i in range(len(self.layer)//2):
             out = self.layer[i](x, out)

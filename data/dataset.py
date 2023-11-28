@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import QuantileTransformer
 from sklearn.model_selection import train_test_split
+from sklearn.cluster import KMeans
 from category_encoders import LeaveOneOutEncoder
 
 def remove_unused_column(data):
@@ -20,9 +21,9 @@ def split_data(data, target, test_size):
     return X_train, y_train.values, X_test, y_test.values
 
 
-def quantile_transform(X_train, X_valid, X_test):
+def quantile_transform(X_train, X_valid, X_test, random_state=55688):
     quantile_train = np.copy(X_train)
-    qt = QuantileTransformer(random_state=55688, output_distribution='normal').fit(quantile_train)
+    qt = QuantileTransformer(random_state=random_state, output_distribution='normal').fit(quantile_train)
     X_train = qt.transform(X_train)
     X_valid = qt.transform(X_valid)
     X_test = qt.transform(X_test)
@@ -210,7 +211,7 @@ def cardio():
 
 def displacement_amplifier():
     full_output_variables = ['X', 'σx', 'Y', 'σy', 's-2r']
-    target = 'σy'
+    target = 'σx'
     data = pd.read_excel('./data/displacement_amplifier/仿真结果.xlsx')
     data = data.astype(float, errors='raise')
     for i in range(data.shape[0]-1, -1, -1):
@@ -241,15 +242,23 @@ def displacement_amplifier():
     test.drop([target], axis=1, inplace=True)
 
     # Labels for classification task
+    # Using KMeans to auto-generate labels
+    n_clusters = 3
     y_train_classification = y_train.copy()
-    y_train_classification[y_train_classification<=np.mean(y_train)] = 0
-    y_train_classification[y_train_classification>np.mean(y_train)] = 1
+    cluster = KMeans(n_clusters=n_clusters, random_state=0).fit(y_train_classification.reshape(-1, 1))
+    y_train_classification = cluster.labels_.squeeze()  # 获取训练后对象的每个样本的标签
+    # y_train_classification[y_train_classification <= np.mean(y_train)] = 0
+    # y_train_classification[y_train_classification > np.mean(y_train)] = 1
+
     y_valid_classification = y_valid.copy()
-    y_valid_classification[y_valid_classification<=np.mean(y_train)] = 0
-    y_valid_classification[y_valid_classification>np.mean(y_train)] = 1
+    y_valid_classification = cluster.predict(y_valid_classification.reshape(-1, 1)).squeeze()
+    # y_valid_classification[y_valid_classification <= np.mean(y_train)] = 0
+    # y_valid_classification[y_valid_classification > np.mean(y_train)] = 1
+
     y_test_classification = y_test.copy()
-    y_test_classification[y_test_classification<=np.mean(y_train)] = 0
-    y_test_classification[y_test_classification>np.mean(y_train)] = 1
+    y_test_classification = cluster.predict(y_test_classification.reshape(-1, 1)).squeeze()
+    # y_test_classification[y_test_classification <= np.mean(y_train)] = 0
+    # y_test_classification[y_test_classification > np.mean(y_train)] = 1
 
     X_train, X_valid, X_test = quantile_transform(train, valid, test)
     return X_train, y_train, X_valid, y_valid, X_test, y_test, \

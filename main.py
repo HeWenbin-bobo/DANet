@@ -4,6 +4,7 @@ import os
 import torch.distributed
 import torch.backends.cudnn
 from sklearn.metrics import accuracy_score, mean_squared_error
+from sklearn.preprocessing import QuantileTransformer
 from data.dataset import get_data
 from lib.utils import normalize_reg_label
 from qhoptim.pyt import QHAdam
@@ -117,12 +118,24 @@ if __name__ == '__main__':
         preds_train = clf.predict(X_train)
         preds_valid = clf.predict(X_valid)
         preds_train_valid = np.concatenate([preds_train, preds_valid])
-        preds_train_valid = preds_train_valid * std + mu
+        preds_train_valid = preds_train_valid * std + mu  # Transform back to original space
         y_train_valid = np.concatenate([y_train, y_valid])
-        y_train_valid = y_train_valid * std + mu
+        y_train_valid = y_train_valid * std + mu  # Transform back to original space
         performanceCalculation(y_train_valid, preds_train_valid, flag='Train')
 
-        y_test = y_test * std + mu
-        preds_test = preds_test * std + mu
+        y_test = y_test * std + mu  # Transform back to original space
+        preds_test = preds_test * std + mu  # Transform back to original space
         performanceCalculation(y_test, preds_test, flag='Test')
+
+        # Check the predicted value for the parameters found by optimization algorithm in Matlab
+        quantile_train = np.copy(X_train)
+        qt = QuantileTransformer(random_state=55688, output_distribution='normal').fit(quantile_train)
+        X_test_final = np.array([[1.660565248, 1.949910684, 8.941169395, 14.59360926,
+                                  7.248374077, 16.03452815, 34.35314743, 7.499260767,
+                                  16, 0.5, 0.802524374]])
+        X_test_final = qt.transform(X_test_final)
+        preds_test_final = clf.predict(X_test_final)
+        preds_test_final = preds_test_final * std + mu  # Transform back to original space
+        print(f"FINAL TEST RESULT : {preds_test_final}")
+
 #'accuracy' metric means roc_auc_score

@@ -113,6 +113,23 @@ class DANsModel(BaseEstimator):
             The resume file directory
         gpu_id: str
             Single GPU or Multi GPU ID
+        y_train_classification : np.array
+            Train targets for classification task
+        eval_set_classification : list of tuple
+            List of eval tuple set (X, y) for classification task.
+            The last one is used for early stopping.
+            Not used for early stopping for now.
+            Early stopping only for regression task.
+        eval_name_classification : list of str
+            List of eval set names for calssification task.
+            Not used for now.
+        eval_metric_classification : list of str
+            List of evaluation metrics for classification task.
+            The last metric is used for early stopping.
+            Not used for early stopping for now.
+            Early stopping only for regression task.
+        loss_fn_classification : callable or None
+            a PyTorch loss function for classification task.
         """
         self.max_epochs = max_epochs
         self.patience = patience
@@ -125,14 +142,14 @@ class DANsModel(BaseEstimator):
         eval_set = eval_set if eval_set else []
 
         self.loss_fn = self._default_loss if loss_fn is None else loss_fn
-        self.loss_fn_classification = self._default_loss_classification if loss_fn_classification is None else loss_fn_classification
+        self.loss_fn_classification = self._default_loss_classification if loss_fn_classification is None else loss_fn_classification  # Update loss function for classification task. Default is cross_entropy. For prediction, 'accuracy' metric for classification task, which means roc_auc_score
         check_array(X_train)
 
-        self.update_fit_params(X_train, y_train, y_train_classification, eval_set)
+        self.update_fit_params(X_train, y_train, y_train_classification, eval_set)  # Get and check dimension of inputs so that it can facilitate the following network construction
         # Validate and reformat eval set depending on training data
         eval_names, eval_set = validate_eval_set(eval_set, eval_name, X_train, y_train)
         train_dataloader, valid_dataloaders = self._construct_loaders(X_train, y_train, eval_set)
-        train_dataloader_classification, valid_dataloaders_classification = self._construct_loaders(X_train, y_train_classification, eval_set_classification)
+        train_dataloader_classification, valid_dataloaders_classification = self._construct_loaders(X_train, y_train_classification, eval_set_classification)  # Construct dataloaders for classification task
 
         self._set_network()
         self._set_metrics(eval_metric, eval_names)
@@ -154,11 +171,12 @@ class DANsModel(BaseEstimator):
             self.epoch = epoch_idx
             # Call method on_epoch_begin for all callbacks
             self._callback_container.on_epoch_begin(epoch_idx)
-            self._train_epoch(train_dataloader, train_dataloader_classification)
+            self._train_epoch(train_dataloader, train_dataloader_classification)  # When training each epoch, use train_dataloader for regression task, train_dataloader_classification for classification task
 
             # Apply predict epoch to all eval sets
             for eval_name, valid_dataloader, valid_dataloader_classification in zip(eval_names, valid_dataloaders, valid_dataloaders_classification):
-                self._predict_epoch(eval_name, valid_dataloader, valid_dataloader_classification)
+                self._predict_epoch(eval_name, valid_dataloader, valid_dataloader_classification)  # Only regression task is used for early stopping. Thouupdate gh dataloader_classification is transmitted, it is not used by now.
+                # _predict_epoch will also self.history.epoch_metrics
 
             # Call method on_epoch_end for all callbacks
             self._callback_container.on_epoch_end(epoch_idx, logs=self.history.epoch_metrics)
@@ -194,7 +212,7 @@ class DANsModel(BaseEstimator):
         for batch_nb, data in enumerate(dataloader):
             data = data.to(self.device).float()
             with torch.no_grad():
-                output, _ = self.network(data)
+                output, _ = self.network(data)  # since the network generate two type of outputs, need to ignore the last one
                 predictions = output.cpu().detach().numpy()
             results.append(predictions)
         res = np.vstack(results)
@@ -245,7 +263,7 @@ class DANsModel(BaseEstimator):
         loss = []
         for batch_idx, ((X, y), (_, y_classification)) in enumerate(zip(train_loader, train_dataloader_classificcation)):
             self._callback_container.on_batch_begin(batch_idx)
-            batch_logs = self._train_batch(X, y, y_classification)
+            batch_logs = self._train_batch(X, y, y_classification)  # y is for regression task, y_classification is for classification task. They are both used for loss calculation
 
             self._callback_container.on_batch_end(batch_idx, batch_logs)
             loss.append(batch_logs['loss'])
@@ -291,7 +309,7 @@ class DANsModel(BaseEstimator):
 
         return batch_logs
 
-    def _predict_epoch(self, name, loader, loader_classification):
+    def _predict_epoch(self, name, loader, loader_classification=None):
         """
         Predict an epoch and update metrics.
         Parameters
