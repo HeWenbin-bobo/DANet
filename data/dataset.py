@@ -211,7 +211,7 @@ def cardio():
 
 def displacement_amplifier():
     full_output_variables = ['X', 'σx', 'Y', 'σy', 's-2r']
-    target = 'σx'
+    target ='Y' #'σx'
     data = pd.read_excel('./data/displacement_amplifier/仿真结果.xlsx')
     data = data.astype(float, errors='raise')
     for i in range(data.shape[0]-1, -1, -1):

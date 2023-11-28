@@ -88,11 +88,26 @@ class DANet(nn.Module):
                   'fix_input_dim': input_dim, 'drop_rate': drop_rate}
         self.init_layer = BasicBlock(input_dim, **params)
         self.lay_num = layer_num
-        self.layer = nn.ModuleList()
+        layer_base1 = nn.ModuleList()
+        layer_base2 = nn.ModuleList()
+        layer_base3 = nn.ModuleList()
         for i in range((layer_num // 2) - 1):
-            self.layer.append(BasicBlock(base_outdim, **params))
-        self.drop = nn.Dropout(0.1)
+            layer_base1.append(BasicBlock(base_outdim, **params))
+            layer_base2.append(BasicBlock(base_outdim, **params))
+            layer_base3.append(BasicBlock(base_outdim, **params))
+        self.layer = nn.ModuleList()
+        self.layer.append(layer_base1)
+        self.layer.append(layer_base2)
+        self.layer.append(layer_base3)
+        self.gate_level_one = nn.ModuleList()
+        self.gate_level_one.append(BasicBlock(base_outdim*2, **params))
+        self.gate_level_one.append(BasicBlock(base_outdim*3, **params))
+        self.gate_level_one.append(BasicBlock(base_outdim*2, **params))
+        self.gate_level_two = nn.ModuleList()
+        for _ in range(2):
+            self.gate_level_two.append(BasicBlock(base_outdim*2, **params))
 
+        self.drop = nn.Dropout(0.1)
         self.fc = nn.Sequential(nn.Linear(base_outdim, 256),
                                 nn.ReLU(inplace=True),
                                 nn.Linear(256, 512),
@@ -119,12 +134,37 @@ class DANet(nn.Module):
         # One is the output for regression task, another is for classification task
         # In this demo, the output for classification task is extracted from the half layers
         out = self.init_layer(x)
-        for i in range(len(self.layer)//2):
-            out = self.layer[i](x, out)
-        classification_out = self.classification_drop(out)
-        classification_out = self.classification_fc(classification_out)
-        for i in range(len(self.layer)-len(self.layer)//2):
-            out = self.layer[i](x, out)
-        out = self.drop(out)
+
+        # First level forward
+        temp = [out for _ in range(len(self.layer))]
+        for i in range(len(self.layer)):
+            for j in range(len(self.layer[i])//2):
+                temp[i] = self.layer[i][j](x, temp[i])
+
+        # First level concatenation
+        out_level_one = list()
+        out_level_one.append(torch.cat((temp[0], temp[1]), 1))
+        out_level_one.append(torch.cat((temp[0], temp[1], temp[2]), 1))
+        out_level_one.append(torch.cat((temp[1], temp[2]), 1))
+        for i in range(len(out_level_one)):
+            out_level_one[i] = self.gate_level_one[i](x, out_level_one[i])
+
+        # Second level forward
+        temp = [out_level_one[i] for i in range(len(self.layer))]
+        for i in range(len(temp)):
+            for j in range(len(self.layer)-len(self.layer)//2):
+                temp[i] = self.layer[i][j](x, temp[i])
+
+        # Second level concatenation
+        out_level_two = list()
+        out_level_two.append(torch.cat((temp[0], temp[1]), 1))
+        out_level_two.append(torch.cat((temp[1], temp[2]), 1))
+        for i in range(len(out_level_two)):
+            out_level_two[i] = self.gate_level_two[i](x, out_level_two[i])
+
+        # Final forward
+        out = self.drop(out_level_two[0])
         out = self.fc(out)
+        classification_out = self.classification_drop(out_level_two[1])
+        classification_out = self.classification_fc(classification_out)
         return out, classification_out
